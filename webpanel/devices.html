@@ -1,0 +1,70 @@
+<!doctype html><html lang="ru"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>M2 · Устройства</title>
+<style>
+:root{color-scheme:dark;font:16px system-ui;background:#10171d;color:#e7eff5}*{box-sizing:border-box}body{margin:0}main{max-width:1100px;margin:auto;padding:32px 22px}a{color:#71ddbb}h1{margin:10px 0;font-size:32px}h2{margin:0 0 12px;font-size:21px}p,small{color:#a6b7c5;line-height:1.6}.eyebrow{color:#71ddbb;font-size:12px;letter-spacing:2px}.card{background:#18232c;border:1px solid #2c3d4a;border-radius:16px;padding:24px;margin:18px 0}.cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}.cards .card{margin:0;min-width:0}input,select{display:block;width:100%;padding:10px;background:#101a22;color:#edf6fc;border:1px solid #405463;border-radius:8px;font:inherit;margin:6px 0 12px}label{display:block;font-size:14px;color:#c1d0dc}button{border:0;border-radius:9px;padding:11px 16px;font:inherit;cursor:pointer;margin:6px 6px 0 0;background:#71ddbb;color:#10251e}button.danger{background:#642f35;color:#ffe1e1}button.secondary{background:#2d4353;color:white}button:disabled{opacity:.5;cursor:wait}input:focus,select:focus,button:focus-visible{outline:2px solid #71ddbb}.meta{font-size:12px;overflow-wrap:anywhere}.status{color:#71ddbb}.error{color:#ffb6a9}.active-device{border-color:#71ddbb;box-shadow:0 0 0 2px #71ddbb44}.readings{font-size:14px;background:#101a22;padding:12px;border-radius:9px}.param{border-top:1px solid #30424e;padding-top:14px;margin-top:12px}.param p{margin:5px 0;font-size:13px}summary{cursor:pointer;padding:14px 0}#commands{font-size:14px}.row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}[hidden]{display:none!important}@media(max-width:720px){.cards{grid-template-columns:1fr}main{padding:24px 14px}.card{padding:18px}}
+</style><main>
+<div class="eyebrow">4VRS ADD-ONS / AQARA M2</div><h1>Устройства</h1><a href="/">← Настройки хаба</a>
+<section class="card"><h2>Добавить датчик</h2><p>Откройте окно на 60 секунд, затем переведите новый датчик в режим сопряжения по его инструкции. Существующие датчики сбрасывать не нужно.</p>
+<div class="row"><button id="pair-start">Добавить устройство</button><button id="pair-stop" class="secondary">Закрыть окно</button><span id="connection" class="status">Проверка связи…</span></div>
+<p id="pair-status" role="status" aria-live="polite">Сопряжение не запущено</p><div id="pair-found"></div>
+<small>Новые поддержанные датчики автоматически появятся в HA, если включён MQTT Discovery. Неизвестные модели появятся в этом списке без неподтверждённых регулировок.</small></section>
+<section class="card"><h2>Найти датчик по кнопке</h2><button id="identify-listen" class="secondary">Слушать 60 секунд</button><p id="identify-status" role="status">Включите поиск, затем кратко нажмите кнопку на корпусе датчика. Новое сообщение подсветит его карточку. Не удерживайте кнопку: это может запустить сопряжение.</p><small>Поиск показывает активность: движение и фоновые отчёты тоже могут подсветить карточку. Тип и время сообщения помогут определить нужный датчик.</small></section><p id="error" class="error" role="alert"></p><div class="cards" id="devices"></div>
+<section class="card"><h2>Результаты команд</h2><div id="commands" role="status">Команд пока нет</div></section>
+<p><small>Имя и время сброса хранятся на хабе. Аппаратные параметры меняются через локальный Zigbee-сервис. Если датчик спит, кратко нажмите его кнопку перед отправкой. Ответ хаба и фактическое поведение датчика — разные этапы проверки. Панель не отправляет команды через внешний MQTT.</small></p>
+</main><script>
+const $=id=>document.getElementById(id),cards=new Map();let busyPair=false,lastPair=null,offset=0,findStart=0,findUntil=0;
+async function api(path,data){const r=await fetch(path,{method:data?'POST':'GET',headers:data?{'Content-Type':'application/json','X-Aqara-Panel':'1'}:{},body:data?JSON.stringify(data):undefined});if(!r.ok)throw Error(await r.text());return r.json()}
+function node(tag,text,cls){const n=document.createElement(tag);if(text!==undefined)n.textContent=text;if(cls)n.className=cls;return n}
+$('identify-listen').onclick=()=>{findStart=Date.now()+offset;findUntil=findStart+60000;$('identify-status').textContent='Слушаем сообщения. Кратко нажмите кнопку датчика.';for(const c of cards.values())c.c.classList.remove('active-device')};
+function pairText(){if(findUntil&&Date.now()+offset>=findUntil){findUntil=0;$('identify-status').textContent+=' · Поиск завершён.';}if(!lastPair)return;const names={opening:'Ожидаем подтверждение открытия',open:'Окно открыто',closed:'Окно закрыто',expired:'Время сопряжения истекло',failed:'Команда не отправлена',unconfirmed:'Открытие не подтверждено — проверьте результат команды'};let text=names[lastPair.status]||'Сопряжение не запущено';if(lastPair.status==='open'){const left=Math.max(0,Math.ceil((Date.parse(lastPair.until)-Date.now()-offset)/1000));text+=' · '+left+' с'}$('pair-status').textContent=text}
+for(const [id,seconds] of [['pair-start',60],['pair-stop',0]])$(id).onclick=async()=>{busyPair=true;$(id).disabled=true;try{await api('/api/devices/pair',{seconds});$('error').textContent='';await refresh()}catch(e){$('error').textContent=e.message}finally{busyPair=false;$(id).disabled=false}};
+const paramNames={detection_interval:'Интервал обнаружения пользователей',sensitivity:'Чувствительность',indicator:'Индикатор триггера (мигание при движении)'};
+const choices={detection_interval:[[10,'10 секунд'],[30,'30 секунд'],[60,'60 секунд'],[120,'120 секунд'],[180,'180 секунд']],sensitivity:[[1,'Низкая'],[2,'Средняя'],[3,'Высокая']],indicator:[[0,'Выключен'],[1,'Включён']]};
+function makeCard(d){
+ const c=node('section',undefined,'card'),heading=node('h2',d.name),meta=node('p',d.model+' · '+d.did,'meta'),readings=node('p','','readings'),seen=node('p','','meta');
+ const form=node('form'),label=node('label','Имя устройства'),name=node('input');name.value=d.preferences.name||d.name;name.maxLength=80;label.append(name);
+ const tl=node('label','Сброс движения в HA, секунд'),timeout=node('input');timeout.type='number';timeout.min='1';timeout.max='86400';timeout.required=true;timeout.value=d.preferences.motion_timeout;tl.append(timeout);tl.hidden=!d.motion;
+ const help=node('small','Сброс состояния HA после последнего движения. Интервал обнаружения самого P1 меняется отдельно.');help.hidden=!d.motion;
+ const save=node('button','Сохранить имя и параметры HA');save.type='submit';const result=node('p');result.setAttribute('role','status');
+ form.append(label,tl,help,save,result);form.onsubmit=async e=>{e.preventDefault();save.disabled=true;try{const v=await api('/api/devices/preferences',{did:d.did,name:name.value,motion_timeout:Number(timeout.value)});result.textContent=v.message;await refresh()}catch(e){result.textContent=e.message}finally{save.disabled=false}};
+ c.append(heading,meta,readings,seen,form);
+ const details=node('details'),summary=node('summary','Настройки датчика');details.append(summary);const paramReadings={};
+ if(d.p1_controls){for(const key of Object.keys(d.p1_parameters||{})){
+  const f=node('form',undefined,'param'),l=node('label',paramNames[key]),select=node('select');
+  for(const [value,title] of choices[key]||[]){const o=node('option',title);o.value=value;select.append(o)}l.append(select);
+  const current=node('p','Текущее значение ещё не получено'),b=node('button','Отправить на датчик');b.type='submit';const msg=node('p');msg.setAttribute('role','status');
+  f.append(l,current,b,msg);f.onsubmit=async e=>{e.preventDefault();b.disabled=true;try{const r=await api('/api/devices/parameter',{did:d.did,parameter:key,value:Number(select.value)});msg.textContent=r.message+' · №'+r.id;await refresh()}catch(e){msg.textContent=e.message}finally{b.disabled=false}};
+  details.append(f);paramReadings[key]={current,select,initialized:false};
+ }details.append(node('small','При задержке коротко нажмите кнопку датчика. Интервал обнаружения: 10, 30, 60, 120 или 180 секунд.'))}
+ else details.append(node('p',d.supported?'Для этой модели подтверждённых аппаратных регулировок пока нет.':'Модель пока не поддержана преобразователем HA.'));
+ const remove=node('button','Удалить из хаба','danger');remove.type='button';
+ remove.onclick=async()=>{
+  const title=heading.textContent;
+  if(!confirm('Удалить «'+title+'» из хаба?\n'+d.did+'\n\nЕго сущности будут удалены из MQTT Discovery. Для возврата понадобится повторное сопряжение.'))return;
+  remove.disabled=true;
+  try{const r=await api('/api/devices/remove',{did:d.did,confirm:d.did});result.textContent=r.message;await refresh()}
+  catch(e){result.textContent=e.message;remove.disabled=false}
+ };
+ c.append(details,remove);$('devices').append(c);return {c,heading,readings,seen,paramReadings,remove};
+}
+async function refresh(){try{
+ const v=await api('/api/devices');$('error').textContent='';offset=Date.parse(v.server_time)-Date.now();
+ $('connection').textContent=v.local_connected?'Локальный MQTT подключён':'Нет связи с MQTT хаба';lastPair=v.pairing;pairText();
+ if(!busyPair)$('pair-start').disabled=!v.local_connected||['opening','open'].includes(lastPair.status);
+ $('pair-found').replaceChildren(...(lastPair.found||[]).map(d=>node('p','Добавлено: '+d.model+' · '+d.did,'status')));
+ const ids=new Set();for(const d of v.devices){ids.add(d.did);let c=cards.get(d.did);if(!c){c=makeCard(d);cards.set(d.did,c)}c.heading.textContent=d.name;
+ const removal=(v.removals||[]).find(r=>r.did===d.did);const deleting=removal&&['pending','accepted'].includes(removal.status);
+ c.remove.disabled=!v.local_connected||Boolean(deleting);c.remove.textContent=deleting?'Удаление…':'Удалить из хаба';
+ const names={motion:'Движение (последний отчёт)',illuminance:'Освещённость, лк',battery:'Батарея, %',moisture:'Протечка'};
+ c.readings.textContent=Object.entries(d.states||{}).map(([k,x])=>(names[k]||k)+': '+x).join(' · ')||'Ожидаем первый отчёт после запуска панели';
+ if(findUntil>Date.now()+offset&&Date.parse(d.last_seen)>=findStart){c.c.classList.add('active-device');$('identify-status').textContent='Отозвался: '+d.name+' · '+(d.last_event||'сообщение')+' · '+new Date(d.last_seen).toLocaleTimeString()}
+ c.seen.textContent=d.last_seen.startsWith('0001')?'Новых сообщений пока нет':'Последнее сообщение: '+new Date(d.last_seen).toLocaleString()+' · '+(d.last_event||'');
+ for(const [key,p] of Object.entries(c.paramReadings)){const value=d.parameters?.[key];if(value!==undefined){p.current.textContent='Последнее полученное от датчика значение: '+(choices[key].find(x=>x[0]===value)?.[1]||value);if(!p.initialized&&document.activeElement!==p.select){p.select.value=value;p.initialized=true}}}
+ }
+ for(const [id,c] of cards){if(!ids.has(id)){c.c.remove();cards.delete(id)}}
+ const statuses={pending:'Ожидание',accepted:'Принято',confirmed:'Подтверждено',unconfirmed:'Не подтверждено',failed:'Ошибка'};
+ $('commands').replaceChildren(...v.commands.map(c=>node('p',new Date(c.created).toLocaleTimeString()+' · '+c.did+' · '+(statuses[c.status]||c.status)+' — '+c.message)));
+ for(const r of v.removals||[])$('commands').append(node('p',new Date(r.created).toLocaleTimeString()+' · Удаление «'+r.name+'» · '+(statuses[r.status]||r.status)+' — '+r.message));
+ if(!v.commands.length&&!(v.removals||[]).length)$('commands').textContent='Команд пока нет';
+}catch(e){$('error').textContent='Не удалось обновить список: '+e.message}}
+refresh();setInterval(refresh,3000);setInterval(pairText,1000);
+</script></html>

@@ -1,0 +1,94 @@
+<!doctype html><html lang="ru"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>M2 · Локальный шлюз</title>
+<style>
+:root{color-scheme:dark;font:16px system-ui;background:#10171d;color:#e7eff5}*{box-sizing:border-box}body{margin:0}main{max-width:920px;margin:auto;padding:36px 22px}header{display:flex;justify-content:space-between;align-items:center;margin-bottom:28px}.eyebrow{color:#71ddbb;font-size:12px;letter-spacing:2px}h1{font-size:30px;margin:8px 0}p{color:#a6b7c5;line-height:1.6}.card{background:#18232c;border:1px solid #2c3d4a;border-radius:16px;padding:24px;margin-bottom:20px}.grid{display:grid;grid-template-columns:2fr 1fr;gap:18px}label{display:block;font-size:14px;color:#c1d0dc;margin-bottom:16px}input,textarea{display:block;background:#101a22;color:#edf6fc;border:1px solid #405463;border-radius:8px;padding:12px;width:100%;margin-top:8px;font:inherit}input:focus,textarea:focus{outline:2px solid #71ddbb}input[type=checkbox]{display:inline;width:auto;margin:0 9px 0 0;accent-color:#71ddbb}button{border:0;border-radius:9px;padding:13px 20px;font:inherit;cursor:pointer;margin:6px 8px 0 0;background:#71ddbb;color:#10251e}button.secondary{background:#2d4353;color:white}button:disabled{opacity:.5;cursor:wait}small{display:block;color:#94a9b8;line-height:1.5;margin-top:7px}.status{display:flex;gap:20px;flex-wrap:wrap}.badge{padding:7px 11px;border-radius:20px;background:#293945;font-size:13px}.good{color:#71ddbb}.muted{color:#a6b7c5}#notice{white-space:pre-wrap;padding:14px;border-radius:8px;background:#233645;display:none}footer{color:#94a9b8;font-size:13px}.hidden{display:none}@media(max-width:600px){.grid{grid-template-columns:1fr}header{display:block}main{padding:24px 14px}.card{padding:18px}}
+</style>
+<main><header><div><div class="eyebrow">4VRS ADD-ONS / AQARA M2</div><h1>Настройки MQTT</h1><a href="/devices" style="color:#71ddbb">Устройства и сопряжение →</a><div><a href="/maintenance" style="color:#71ddbb">Обновление надстройки →</a></div><div class="muted">Ваш хаб. Ваш сервер.</div></div><span class="badge">Локальная панель</span></header>
+<section class="card"><div class="status"><span id="local">Хаб: проверка…</span><span id="remote">Сервер: проверка…</span></div><p id="state">Загрузка</p><small id="counts"></small></section>
+<form id="form" class="card"><h2>Подключение к серверу</h2><p>Укажите MQTT-сервер, на который хаб будет передавать события датчиков.</p>
+<div class="grid"><label>Адрес сервера<input id="host" required placeholder="192.168.1.10 или mqtt.home" autocomplete="off"></label><label>Порт<input id="port" type="number" min="1" max="65535" required value="1883"></label></div>
+<div class="grid"><label>Имя пользователя<input id="username" autocomplete="off"></label><label>Пароль<input id="password" type="password" autocomplete="new-password"><small id="saved"></small></label></div>
+<label><input type="checkbox" id="clear_password">Удалить сохранённый пароль</label>
+<label><input type="checkbox" id="tls">Защищённое соединение TLS</label>
+<label id="ca_wrap" class="hidden">CA-сертификат сервера (PEM)<textarea id="ca" rows="4" placeholder="-----BEGIN CERTIFICATE-----"></textarea><small>Для собственного центра сертификации вставьте его CA. Проверка сертификата обязательна.</small></label>
+<div class="grid"><label>Префикс тем<input id="prefix" value="aqara/m2" required></label><label>Идентификатор клиента<input id="client_id" value="aqara-m2-bridge" required></label></div>
+<label><input type="checkbox" id="enabled">Включить передачу событий</label>
+<label><input type="checkbox" id="ha_discovery">Создавать устройства в Home Assistant (MQTT Discovery)</label>
+<p class="muted">P1 и датчики движения RTCGQ11LM: движение, освещённость, батарея. Датчики протечки SJCGQ11LM и T1: протечка, батарея. Время сброса движения в HA задаётся в разделе «Устройства». Префикс Discovery: homeassistant.</p>
+<div><button type="button" id="test" class="secondary">Проверить соединение</button><button type="submit">Сохранить и применить</button></div>
+<p id="notice" role="status" aria-live="polite"></p>
+</form>
+<section class="card"><h2>Сеть · Ethernet</h2>
+<p id="net-ident">Чтение сетевых параметров…</p>
+<form id="network-form">
+<label><input type="checkbox" id="net-dhcp">Получать адрес автоматически (DHCP)</label>
+<div class="grid"><label>IPv4-адрес<input id="net-ip" autocomplete="off"></label><label>Маска подсети<input id="net-mask" autocomplete="off"></label></div>
+<div class="grid"><label>Шлюз<input id="net-gateway" autocomplete="off"></label><label>DNS через запятую<input id="net-dns" autocomplete="off"></label></div>
+<small>Изменение IP может прервать соединение. Откройте панель по новому адресу и подтвердите доступ в течение 90 секунд. Без подтверждения отдельный процесс вернёт прежние параметры. Настройки действуют до перезагрузки; автозапуск панели не делает сетевые настройки постоянными.</small>
+<button type="submit" class="secondary">Применить сеть с откатом</button><button type="button" id="net-confirm" hidden>Подтвердить доступ</button><p id="net-result" role="status"></p>
+</form></section>
+<section class="card"><h2>Пароль веб-панели</h2>
+<form id="password-form"><label>Текущий пароль<input type="password" id="current-panel-password" autocomplete="current-password" required></label>
+<div class="grid"><label>Новый пароль<input type="password" id="new-panel-password" autocomplete="new-password" minlength="12" required></label><label>Повтор нового пароля<input type="password" id="repeat-panel-password" autocomplete="new-password" minlength="12" required></label></div>
+<small>Не менее 12 символов. Этот пароль защищает веб-интерфейс; пароль root остаётся прежним.</small><button type="submit">Сменить пароль панели</button><p id="password-result" role="status"></p></form>
+</section>
+<section class="card" id="root-access"><h2>Доступ к хабу</h2>
+<p>Системный пользователь <strong>admin</strong> имеет права root (UID 0). Доступ — через UART.</p>
+<button type="button" id="reveal-root" class="secondary">Показать пароль root</button>
+<p id="root-error" role="status"></p><div id="root-secret" hidden><label>Сохранённый пароль root<input id="root-value" readonly autocomplete="off"></label><small>Автоматически скроется через 20 секунд. После смены системного пароля вне панели сохранённую копию нужно обновить.</small></div>
+<details><summary>Обновить сохранённую копию root-пароля</summary>
+<p>Если вы изменили пароль через UART, впишите новое значение сюда. Панель только запомнит его; системный пароль не меняется.</p>
+<form id="root-copy-form"><div class="grid"><label>Новая копия<input id="root-copy" type="password" autocomplete="off" required></label><label>Повтор<input id="root-copy-repeat" type="password" autocomplete="off" required></label></div><button type="submit" class="secondary">Сохранить копию</button><p id="root-copy-result" role="status"></p></form></details>
+</section>
+<section class="card" id="about"><h2>О системе</h2>
+<p><strong>4VRS Add-ons · 0.4.1</strong><br>Дмитрий / 4VRS</p>
+<p>Независимая надстройка к штатному ПО Aqara. Локальная веб-панель и MQTT-мост.</p>
+<div id="hardware"></div><details><summary>Заводские сведения и SDK</summary><pre id="factory" style="white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px"></pre></details>
+<small>Модель устройства может отличаться от значения по умолчанию в общей заводской прошивке. Ключи и коды сопряжения здесь не показываются.</small>
+</section>
+<footer>События публикуются в <code id="topic">aqara/m2/zigbee/send</code>. Настройки хранятся на хабе.<p><span id="autostart-status">Проверка автозапуска…</span> MQTT Discovery включается отдельной настройкой. Доступность отражает связь моста с брокерами, а не проверку каждого спящего датчика. Команды управления через внешний MQTT пока не включены.</p></footer>
+</main><script>
+const el=id=>document.getElementById(id);let loaded=false;
+function notice(s){el('notice').style.display='block';el('notice').textContent=s}
+function payload(){let p={};for(const k of ['host','username','password','prefix','client_id','ca'])p[k]=el(k).value;p.port=Number(el('port').value);for(const k of ['tls','enabled','ha_discovery','clear_password'])p[k]=el(k).checked;return p}
+async function request(path,data){const r=await fetch(path,{method:data?'POST':'GET',headers:data?{'Content-Type':'application/json','X-Aqara-Panel':'1'}:{},body:data?JSON.stringify(data):undefined});if(!r.ok)throw Error(await r.text());return r.json()}
+async function refresh(){try{const v=await request('/api/status');el('autostart-status').textContent=({enabled:'Автозапуск панели включён.',disabled:'Автозапуск панели отключён.',not_configured:'Автозапуск панели не настроен.'})[v.autostart]||'Статус автозапуска неизвестен.';if(!loaded){for(const [k,x] of Object.entries(v.config)){if(el(k)){if(typeof x==='boolean')el(k).checked=x;else el(k).value=x}}loaded=true;el('ca_wrap').classList.toggle('hidden',!el('tls').checked)}
+el('saved').textContent=v.password_saved?'Пароль сохранён. Оставьте поле пустым, чтобы не менять его.':'Пароль не задан.';
+el('local').textContent='MQTT хаба: '+(v.status.local?'подключён':'не подключён');el('remote').textContent='Внешний сервер: '+(v.status.remote?'подключён':'не подключён');el('state').textContent=v.status.message;el('counts').textContent='Передано событий: '+v.status.forwarded+(v.status.last_event?' · Последнее: '+v.status.last_event:'');el('topic').textContent=v.config.prefix+'/zigbee/send';
+}catch(e){el('state').textContent='Панель недоступна: '+e.message}}
+async function action(path){if(!el('form').reportValidity())return;document.querySelectorAll('button').forEach(b=>b.disabled=true);notice('Выполняется…');try{let r=await request(path,payload());notice(r.message||'Настройки сохранены. Мост применяет изменения.');if(path==='/api/config'){el('password').value='';el('clear_password').checked=false}await refresh()}catch(e){notice(e.message)}finally{document.querySelectorAll('button').forEach(b=>b.disabled=false)}}
+el('form').onsubmit=e=>{e.preventDefault();action('/api/config')};el('test').onclick=()=>action('/api/test');el('tls').onchange=()=>el('ca_wrap').classList.toggle('hidden',!el('tls').checked);refresh();setInterval(refresh,5000);
+el('password-form').onsubmit=async e=>{e.preventDefault();const btn=e.target.querySelector('button');btn.disabled=true;try{
+const v=await request('/api/password',{current:el('current-panel-password').value,new:el('new-panel-password').value,repeat:el('repeat-panel-password').value});
+el('password-result').textContent=v.message;for(const k of ['current-panel-password','new-panel-password','repeat-panel-password'])el(k).value='';hideRoot();
+}catch(err){el('password-result').textContent=err.message}finally{btn.disabled=false}};
+el('root-copy-form').onsubmit=async e=>{e.preventDefault();try{
+const v=await request('/api/root-password-copy',{Password:el('root-copy').value,Repeat:el('root-copy-repeat').value});el('root-copy-result').textContent=v.message;el('root-copy').value='';el('root-copy-repeat').value='';hideRoot()
+}catch(err){el('root-copy-result').textContent=err.message}};
+let netPending=null,netLoaded=false;
+async function networkRefresh(){try{const v=await request('/api/network');el('net-ident').textContent='eth0 · MAC '+v.mac+' · текущий IP '+v.config.ip;
+if(!netLoaded){el('net-dhcp').checked=v.config.mode==='dhcp';el('net-ip').value=v.config.ip;el('net-mask').value=v.config.mask;el('net-gateway').value=v.config.gateway;el('net-dns').value=(v.config.dns||[]).join(', ');netLoaded=true}
+netPending=v.pending||null;el('net-confirm').hidden=!netPending||!netPending.applied;
+}catch(err){el('net-ident').textContent='Не удалось прочитать сеть: '+err.message}}
+el('network-form').onsubmit=async e=>{e.preventDefault();
+if(!confirm('Применить настройки Ethernet? Через 90 секунд они вернутся, если вы не подтвердите доступ.'))return;
+try{const v=await request('/api/network/apply',{mode:el('net-dhcp').checked?'dhcp':'static',ip:el('net-ip').value.trim(),mask:el('net-mask').value.trim(),gateway:el('net-gateway').value.trim(),dns:el('net-dns').value.split(',').map(x=>x.trim()).filter(Boolean)});netPending=v.pending;el('net-result').textContent=v.message;
+if(!el('net-dhcp').checked){const p=document.createElement('p'),a=document.createElement('a');a.href=location.protocol+'//'+el('net-ip').value.trim()+(location.port?':'+location.port:'');a.textContent='Открыть панель по новому адресу';a.style.color='#71ddbb';p.append(a);el('net-result').append(p)}
+}catch(err){el('net-result').textContent=err.message}};
+el('net-confirm').onclick=async()=>{if(!netPending)return;try{const v=await request('/api/network/confirm',{token:netPending.token});el('net-result').textContent=v.message;netPending=null;el('net-confirm').hidden=true;await networkRefresh()}catch(err){el('net-result').textContent=err.message}};
+networkRefresh();setInterval(networkRefresh,5000);
+let rootTimer;
+function hideRoot(){el('root-value').value='';el('root-secret').hidden=true;el('reveal-root').textContent='Показать пароль root';clearTimeout(rootTimer)}
+el('reveal-root').onclick=async()=>{
+if(!el('root-secret').hidden){hideRoot();return}
+try{const v=await request('/api/root-password',{});el('root-error').textContent='';el('root-value').value=v.password;el('root-secret').hidden=false;el('reveal-root').textContent='Скрыть пароль';rootTimer=setTimeout(hideRoot,20000)}catch(e){el('root-error').textContent=e.message}
+};
+document.addEventListener('visibilitychange',()=>{if(document.hidden)hideRoot()});
+window.addEventListener('pagehide',hideRoot);
+request('/api/about').then(v=>{
+const f=v.factory||{};
+const lines=[['Устройство',f['ro.sys.name']],['Производитель',f['ro.sys.vendor']],['Фактическая модель',v.effective_model],['Прошивка',f['ro.sys.fw_ver']?f['ro.sys.fw_ver']+' / build '+f['ro.sys.build_num']:null],['Аппаратная версия',f['ro.sys.hw_ver']],['Процессор',v['cpu model']],['Ядро Linux',v.kernel]];
+for(const [k,x] of lines){if(x){const p=document.createElement('p');p.style.margin='6px 0';p.textContent=k+': '+x;el('hardware').append(p)}}
+el('factory').textContent=Object.entries(f).map(([k,x])=>k+' = '+x).join('\n')+'\n\n'+(v.sdk||'');
+}).catch(()=>{el('hardware').textContent='Не удалось получить сведения хаба.'});
+
+</script></html>
